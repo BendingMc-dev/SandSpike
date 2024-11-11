@@ -7,7 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 
-public class AbilityListener implements Listener {
+public class SandSpikeListener implements Listener {
     @EventHandler
     public void onPlayerSneak(PlayerToggleSneakEvent event) {
 //        System.out.println("Player is sneaking!");

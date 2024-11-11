@@ -5,8 +5,6 @@ import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
 import com.projectkorra.projectkorra.ability.SandAbility;
 import com.projectkorra.projectkorra.configuration.ConfigManager;
-import com.projectkorra.projectkorra.util.BlockSource;
-import com.projectkorra.projectkorra.util.ClickType;
 import com.projectkorra.projectkorra.util.TempFallingBlock;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -14,6 +12,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.type.PointedDripstone;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
@@ -21,14 +20,19 @@ import java.util.Collection;
 import java.util.List;
 
 public final class SandSpike extends SandAbility implements AddonAbility {
-    private long cooldown;
-    private int range;
-    private int sourceRange;
+    private long cooldown = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.Cooldown");
+    private int range = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.Range");
+    private int sourceRange = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.SourceRange");
     private Block sourceBlock;
     private Material sourceBlockMaterial;
     private Location location;
     private boolean isProgressing;
-    private int maxHeight;
+
+    private Permission perm;
+
+    private SandSpikeListener listener;
+    private int maxHeight = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.MaxHeight");
+
 
     public SandSpike(Player player) {
         super(player);
@@ -40,27 +44,12 @@ public final class SandSpike extends SandAbility implements AddonAbility {
             return;
         }
 
-        this.setFields();
 
         System.out.println("Checking if source block can be selected...");
 
         if (this.prepare()) {
             this.start();
         }
-    }
-
-    public void setFields() {
-        this.range = ConfigManager.getConfig().getInt(Config.RANGE.getPath());
-        this.cooldown = ConfigManager.getConfig().getInt(Config.COOLDOWN.getPath());
-        this.sourceRange = ConfigManager.getConfig().getInt(Config.SOURCE_RANGE.getPath());
-        this.maxHeight = ConfigManager.getConfig().getInt(Config.MAX_HEIGHT.getPath());
-        this.isProgressing = false;
-
-        System.out.println("Setting fields:");
-        System.out.println("\tRange: " + this.range);
-        System.out.println("\tCooldown: " + this.cooldown);
-        System.out.println("\tMax Height: " + this.maxHeight);
-        System.out.println("\tSource Range: " + this.sourceRange);
     }
 
     public void removeNonProgressingInstances(Player player) {
@@ -270,14 +259,18 @@ public final class SandSpike extends SandAbility implements AddonAbility {
 
     @Override
     public void load() {
-        ConfigManager.getConfig().addDefault(Config.RANGE.getPath(), 20);
-        ConfigManager.getConfig().addDefault(Config.COOLDOWN.getPath(), 5000);
-        ConfigManager.getConfig().addDefault(Config.SOURCE_RANGE.getPath(), 10);
-        ConfigManager.getConfig().addDefault(Config.MAX_HEIGHT.getPath(), 6);
-        ConfigManager.defaultConfig.save();
+        listener = new SandSpikeListener();
+        ProjectKorra.plugin.getServer().getPluginManager().registerEvents(listener, ProjectKorra.plugin);
+        perm = new Permission("bending.ability.SandSpike");
+        perm.setDefault(PermissionDefault.OP);
+        ProjectKorra.plugin.getServer().getPluginManager().addPermission(perm);
 
-        ProjectKorra.plugin.getServer().getPluginManager().registerEvents(new AbilityListener(), ProjectKorra.plugin);
-        ProjectKorra.plugin.getServer().getPluginManager().addPermission(new Permission("bending.ability.sandspike"));
+
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.Range", 20);
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.Cooldown", 5000);
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.SourceRange", 10);
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.MaxHeight", 6);
+        ConfigManager.defaultConfig.save();
 
         ProjectKorra.plugin.getLogger().info(this.getName() + " " + this.getVersion() + " by " + this.getAuthor() + " has been successfully enabled.");
     }
@@ -289,7 +282,7 @@ public final class SandSpike extends SandAbility implements AddonAbility {
 
     @Override
     public String getAuthor() {
-        return "Bera";
+        return "BeraTR & ShadowTP";
     }
 
     @Override
