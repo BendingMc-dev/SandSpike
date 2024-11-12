@@ -10,6 +10,8 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.PointedDripstone;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
 import org.bukkit.permissions.Permission;
@@ -23,6 +25,7 @@ import java.util.List;
 public final class SandSpike extends SandAbility implements AddonAbility {
     private long cooldown;
     private int range, sourceRange, maxHeight;
+    private double damage; // New damage variable
     private Block sourceBlock;
     private Material sourceBlockMaterial;
     private Location location;
@@ -39,11 +42,15 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         this.range = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.Range");
         this.sourceRange = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.SourceRange");
         this.maxHeight = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.MaxHeight");
+        this.damage = ConfigManager.getConfig().getDouble("ExtraAbilities.Bera.SandSpike.Damage", 4.0); // Default damage of 4.0 if not set
 
         if (!bPlayer.canBend(this)) {
             System.out.println("Player can't bend SandSpike!");
             return;
         }
+
+        // Set location to the player's eye location
+        this.location = player.getEyeLocation();
 
         if (prepare()) {
             start();
@@ -116,24 +123,69 @@ public final class SandSpike extends SandAbility implements AddonAbility {
 
     @Override
     public void progress() {
+        // Check if the ability is still progressing
         if (!isProgressing()) {
             return;
         }
 
+        // Calculate the distance between the current location and the source block's location
         double distance = location.distance(sourceBlock.getLocation());
 
-        if (distance > range) {
-            System.out.println("Out of range (" + range + "), removing");
+        // If the ability exceeds its range or hits a solid block, remove it
+        if (distance > range){
+            System.out.println("Out of range or hit solid block, removing");
             remove();
             return;
         }
 
+        // Deal damage to nearby entities
+        applyDamageToNearbyEntities();
+
+        // Determine the height of the spike based on distance traveled
         int height = (int) Math.ceil((double) maxHeight / range * distance);
         createSpikeAtLocation(location.clone(), height);
 
-        Location destination = GeneralMethods.getTargetedLocation(player, range);
-        Vector direction = new Vector(destination.getX() - sourceBlock.getX(), 0, destination.getZ() - sourceBlock.getZ());
-        location.add(direction.normalize());
+        // Place a temporary block at the current location to create a trail
+        createTrailBlock(location);
+
+        // Get the direction the player is looking and calculate the next step
+        Vector direction = player.getEyeLocation().getDirection();
+        Location nextLocation = location.clone().add(direction.normalize());
+
+        // Adjust Y level to match the ground level at the next location
+        int groundY = nextLocation.getWorld().getHighestBlockYAt(nextLocation);
+        nextLocation.setY(groundY);
+
+        // Update the current location to the next grounded location
+        location = nextLocation;
+    }
+
+
+    private void applyDamageToNearbyEntities() {
+        double radius = 1.5; // Radius around the spike for damage detection
+        List<Entity> nearbyEntities = (List<Entity>) location.getWorld().getNearbyEntities(location, radius, radius, radius);
+
+        for (Entity entity : nearbyEntities) {
+            // Exclude the player who cast the ability
+            if (entity instanceof Player && entity.equals(player)) {
+                continue;
+            }
+            // Apply damage to other entities
+            if (entity instanceof LivingEntity) {
+                ((LivingEntity) entity).damage(damage, player);
+            }
+        }
+
+        //todo: implement blindess effect (possibly), funny dust particles on player when blind
+        //todo: 
+    }
+
+    private void createTrailBlock(Location location) {
+        Material trailMaterial = sourceBlockMaterial; // Use the original source block material for the trail
+        TempFallingBlock tempTrailBlock = new TempFallingBlock(location.getBlock().getLocation(), trailMaterial.createBlockData(), new Vector(0, 0, 0), this, false);
+
+        // Schedule task to remove the trail block after 2 seconds (40 ticks)
+        ProjectKorra.plugin.getServer().getScheduler().scheduleSyncDelayedTask(ProjectKorra.plugin, () -> tempTrailBlock.remove(), 40L);
     }
 
     public void createSpikeAtLocation(Location location, int height) {
@@ -169,9 +221,8 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         // Top
         PointedDripstone blockData = (PointedDripstone) Material.POINTED_DRIPSTONE.createBlockData();
         blockData.setThickness(PointedDripstone.Thickness.TIP);
-        new TempFallingBlock(location.add(0, amountTop, 0), blockData, velocity, this, canExpire);
+        new TempFallingBlock(location.add(0, 1, 0), blockData, velocity, this, canExpire);
     }
-
 
     @Override
     public void remove() {
@@ -215,6 +266,7 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.Cooldown", 5000);
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.SourceRange", 10);
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.MaxHeight", 3);
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.Damage", 4.0);
         ConfigManager.defaultConfig.save();
 
         ProjectKorra.plugin.getLogger().info(getName() + " " + getVersion() + " by " + getAuthor() + " has been successfully enabled.");
