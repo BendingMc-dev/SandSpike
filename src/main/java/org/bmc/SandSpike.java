@@ -16,6 +16,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
@@ -24,12 +26,14 @@ import java.util.List;
 
 public final class SandSpike extends SandAbility implements AddonAbility {
     private long cooldown;
-    private int range, sourceRange, maxHeight;
+    private int range, sourceRange, maxHeight, BDuration;
     private double damage; // New damage variable
     private Block sourceBlock;
     private Material sourceBlockMaterial;
     private Location location;
     private boolean isProgressing;
+
+    private static Vector initialDirection; // Store initial direction for straight-line travel
 
     private Permission perm;
     private SandSpikeListener listener;
@@ -42,7 +46,8 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         this.range = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.Range");
         this.sourceRange = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.SourceRange");
         this.maxHeight = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.MaxHeight");
-        this.damage = ConfigManager.getConfig().getDouble("ExtraAbilities.Bera.SandSpike.Damage", 4.0); // Default damage of 4.0 if not set
+        this.damage = ConfigManager.getConfig().getDouble("ExtraAbilities.Bera.SandSpike.Damage");
+        this.BDuration = ConfigManager.getConfig().getInt("ExtraAbilities.Bera.SandSpike.BlindnessDuration");
 
         if (!bPlayer.canBend(this)) {
             System.out.println("Player can't bend SandSpike!");
@@ -51,6 +56,8 @@ public final class SandSpike extends SandAbility implements AddonAbility {
 
         // Set location to the player's eye location
         this.location = player.getEyeLocation();
+
+
 
         if (prepare()) {
             start();
@@ -116,6 +123,7 @@ public final class SandSpike extends SandAbility implements AddonAbility {
     public static void shootSpikes(Player player) {
         List<SandSpike> sandSpikeInstances = new ArrayList<>(getAbilities(player, SandSpike.class));
         for (SandSpike sandSpike : sandSpikeInstances) {
+            SandSpike.initialDirection = player.getEyeLocation().getDirection().normalize();
             sandSpike.setProgressing(true);
             sandSpike.unselectSource();
         }
@@ -123,6 +131,12 @@ public final class SandSpike extends SandAbility implements AddonAbility {
 
     @Override
     public void progress() {
+
+        if (!bPlayer.canBendIgnoreBinds(this)){
+            remove();
+            return;
+        }
+
         // Check if the ability is still progressing
         if (!isProgressing()) {
             return;
@@ -146,18 +160,26 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         createSpikeAtLocation(location.clone(), height);
 
         // Place a temporary block at the current location to create a trail
-        createTrailBlock(location);
+        createTrailBlock(location.clone());
+
+        Vector direction;
+
+        if (player.isSneaking()) {
+            direction = player.getEyeLocation().getDirection();
+        } else{
+            direction = initialDirection;
+        }
 
         // Get the direction the player is looking and calculate the next step
-        Vector direction = player.getEyeLocation().getDirection();
         Location nextLocation = location.clone().add(direction.normalize());
 
         // Adjust Y level to match the ground level at the next location
         int groundY = nextLocation.getWorld().getHighestBlockYAt(nextLocation);
         nextLocation.setY(groundY);
-
         // Update the current location to the next grounded location
         location = nextLocation;
+
+
     }
 
 
@@ -172,12 +194,14 @@ public final class SandSpike extends SandAbility implements AddonAbility {
             }
             // Apply damage to other entities
             if (entity instanceof LivingEntity) {
-                ((LivingEntity) entity).damage(damage, player);
+                LivingEntity livingEntity = (LivingEntity) entity;
+                livingEntity.damage(damage, player);
+                livingEntity.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, BDuration, 25));
+                remove();
             }
         }
 
         //todo: implement blindess effect (possibly), funny dust particles on player when blind
-        //todo: 
     }
 
     private void createTrailBlock(Location location) {
@@ -267,6 +291,7 @@ public final class SandSpike extends SandAbility implements AddonAbility {
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.SourceRange", 10);
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.MaxHeight", 3);
         ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.Damage", 4.0);
+        ConfigManager.getConfig().addDefault("ExtraAbilities.Bera.SandSpike.BlindnessDuration", 2000);
         ConfigManager.defaultConfig.save();
 
         ProjectKorra.plugin.getLogger().info(getName() + " " + getVersion() + " by " + getAuthor() + " has been successfully enabled.");
